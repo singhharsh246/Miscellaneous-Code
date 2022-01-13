@@ -1,0 +1,204 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r include = FALSE}
+setwd('/Users/rctrj/UCD/Winter/BAX452/Homework/HW1')
+```
+
+---
+title: "HW1"
+output: html_document
+---
+
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+###### Summary of the whole data set
+
+```{r  include = FALSE}
+library(rmarkdown)
+
+#load the data
+cars = read.csv("cars.csv")
+names(cars)
+
+```
+
+```{r cars}
+summary(cars)
+```
+
+```{r include = FALSE}
+#factor some variables to start with
+cars$fuel_type <- factor(cars$fuel_type, levels = c("gas", "diesel"))
+cars$aspiration <- factor(cars$aspiration, levels = c("std", "turbo"))
+cars$num_of_doors <- factor(cars$num_of_doors, levels = c("two", "four"))
+#no specific ordering
+cars$body_style <- factor(cars$body_style)
+cars$drive_wheels <- factor(cars$drive_wheels)
+cars$make <- factor(cars$make)
+
+xy <- cars[ , c("price", "horsepower", "fuel_type", "aspiration", "num_of_doors",
+                "body_style", "drive_wheels", "make", "city_mpg", "length")]
+
+```
+####### Summary of xy dataset 
+
+```{r pressure}
+summary(xy)
+```
+
+
+### structure of the matrix 
+
+```{r echo=FALSE}
+str(xy)
+
+```
+
+## Individual plots
+
+### Scatter plot
+
+```{r echo=FALSE}
+library(lattice)
+pairs(price~fuel_type+aspiration+num_of_doors+body_style+drive_wheels+make,
+      data=xy,
+   main="Scatterplot Matrix for qualitative variables with price")
+```
+
+
+```{r echo=FALSE}
+library(lattice)
+pairs(~price+horsepower+fuel_type+aspiration+num_of_doors+body_style+drive_wheels+make+city_mpg+length,
+      data=xy,
+   main="Scatterplot Matrix")
+```
+
+### Correlation matrix
+
+```{r echo=FALSE}
+cor(xy[, c('price', "horsepower", "city_mpg", "length")], method = "spearman")
+
+```
+
+
+```{r echo=FALSE}
+pairs(~price+horsepower+city_mpg+length,
+      data=xy,
+   main="Scatterplot Matrix for the quantiative variables")
+```
+
+## Summary of the EDA
+
+1. There are 4 quantitative variables (price, horsepower, city_mpg, length) in the sliced data. 
+2. There are 6 qualitative variables (fuel_type, aspiration, num_of_doors, body_style, drive_wheel, make) in the sliced data. 
+3. From the correlation matrix we can see that there is a high correlation (both positive and negative) among different quantitative variables in the sliced data. 
+4. There are 5 types of body style with hatchback and sedan making the most of cars in the data set. 
+5. There are 3 different kinds of drive wheels and forward and reverse make up for most of the cars. 
+6. Toyota has the largest among any automaker. 
+
+
+## Simple Linear Regression Model 
+
+```{r simple linear regresison model, echo=TRUE}
+
+lm_model <- lm(price~horsepower+fuel_type+aspiration+num_of_doors+body_style+
+     drive_wheels+make+city_mpg+length,data=xy,)
+summary(lm_model)
+AIC(lm_model)
+BIC(lm_model)
+```
+
+Interpretation of the simple linear regression model:
+
+1. The overall model p-value is less than 2.2e-16 and hence, highly significant at 5% significance level.
+2. The coefficient for horsepower (HP) is 106.10 and highly significant at 5% significance level. Hence, for every 1 unit increase in HP lead to a 106.1 unit increase in price, keeping everything else constant. 
+3. aspiration and turbo, both are insignificant at 5% significance level and hence, we cannot interpret them. 4. The coefficients of body_style are all significant. 
+5. The type of drive_wheel is not significant at 5% significance level and hence, we cannot interpret it. 
+6. Most of the "make" dummy variables are insignificant.
+7. The coefficient of fuel_type is 2173.04 and highly significant at 5% significance level. Hence on average, the price of the car is 2173.04 unit dollars more when the car is diesel as compared to when the car is not diesel, keeping everything else constant. 
+8. city_mpg is not significant at 5% significance level and hence, we cannot interpret it. 
+9. The coefficient of length is 138.64 and highly significant at 5% significance level. Hence on average, the price of the car increases by 138.64 units for every one unit increase in length, keeping everything else constant. 
+
+
+The overall model Adjusted R-squared is 92.29%. 
+
+## Modified / Improved regression model 
+
+To come up with our improved model, we have transformed some of the variables. removed some variables or came up with some completely new variable. The one new variable that I defined helps us differentiate between luxury and non-luxury cars. Luxury cars include BMW, Audi, Jaguar, Mercedes-Benz and Porsche. All other cars are termed as non-luxury. We also do a similar modification of the type of wheel drive. 
+
+### creation of new variable 
+
+```{r modifying the data frame, echo=TRUE}
+xy$drive_type <- ifelse(xy$drive_wheels %in% c("fwd", "rwd"), 1, 0)
+xy$luxury_make <- ifelse(xy$make %in% c("bmw", "audi", "jaguar", "mercedes-benz", "porsche"),"luxury" , "non-luxury")
+```
+
+### Improved variable
+
+```{r Improved linear regresison model, echo=TRUE}
+price <- xy$price
+horsepower <- xy$horsepower
+fuel_type <- xy$fuel_type
+body_style <- xy$body_style
+luxury_make <- xy$luxury_make
+length <- xy$length
+city_mpg <- log(xy$city_mpg)
+
+lm_model_imp <- lm(price~horsepower+fuel_type+body_style+ luxury_make+length + I(length^2))
+summary(lm_model_imp)
+AIC(lm_model_imp)
+BIC(lm_model_imp)
+car::vif(lm_model_imp)
+```
+
+We can see that even though adjusted R-squared is slightly lower for the improved model as compared to the simple linear model but the BIC value has improved and we also decreased the total number of variables, which agrees with principle of parsimony. 
+
+Interpretation of the model:
+
+1. The overall model p-value is less than 2.2e-16 and hence, highly significant at 5% significance level.
+2. The coefficient for horsepower (HP) is 98.57 and highly significant at 5% significance level. Hence, for every 1 unit increase in HP lead to a 98.57 unit increase in price, keeping everything else constant. 
+3. The new variable non-luxury_make is highly significant at 5% significance level and hence on average, the price for non luxury vehicles is 8127 units lower as compared to luxury make. 
+7. The coefficient of fuel_type is 3042 and highly significant at 5% significance level. Hence on average, the price of the car is 3042 unit dollars more when the car is diesel as compared to when the car is not diesel, keeping everything else constant. 
+8. The coefficients of the dummy variable for body type are significant. 
+9. The coefficient of length and the quadratic term of length are highly significant at 5% significance level. 
+
+
+
+### Why might false discoveries be an issue ?
+
+The p-values displayed in the summary are for individual t-tests and hence, the probability of identifying a wrong signal increases as we increase the number of variables in the model. The situation becomes really critical if we have a very high number of variables. For e.g. if alpha is 0.05 and we have 100 variables, then we will incorrectly classify 5 signals which can prove to be a very critical depending on the problem statement. 
+
+
+
+```{r p.value, echo = TRUE}
+p_vals <- data.frame(summary(lm_model_imp)$coefficients[,4])
+
+### function to plot p values ####
+fdr <- function(pvals, q, plotit=FALSE){
+  pvals <- pvals[!is.na(pvals)]
+  N <- length(pvals)
+  
+  k <- rank(pvals, ties.method="min")
+  alpha <- max(pvals[ pvals <= (q*k/N) ])
+  
+  if(plotit){
+    sig <- factor(pvals <= alpha)
+    o <- order(pvals)
+    plot(pvals[o], log="xy", col=c("grey60","red")[sig[o]], pch=20, 
+      ylab="p-values", xlab="tests ordered by p-value", main = paste('FDR =',q))
+    lines(1:N, q*(1:N) / N)
+  }
+  
+  return(alpha)
+}
+
+fdr(p_vals,0.1,plotit=TRUE)
+
+```
+
+After controlling for FDR, we can still make 10 discoveries and we exact 3 discoveries out of every 1000 to be incorrect. 
