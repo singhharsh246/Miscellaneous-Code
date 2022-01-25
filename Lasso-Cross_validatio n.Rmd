@@ -1,0 +1,190 @@
+---
+title: "Assignment 3"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(carData)
+library(car)
+library(ggplot2)
+library(jsonlite)
+library(dplyr)
+library(purrr)
+library(tidyr)
+library(rjson)
+library(lubridate)
+library(pROC)
+library(caret)
+library(fastDummies)
+library(glmm)
+library(lme4)
+
+library(tidyverse)
+library(caret)
+library(modelr)
+
+library(glmnet)
+
+```
+
+## Part 1 ##
+
+It is not wise to use FDR as a selection tool as it assumes completely independent t-tests between the variables, but, in reality that is never the case and varying degree of multicolinearity always exists in the data set, leading to inflation of variance and hence, larger p-values, leading to unreliable variable selection. 
+
+## Part 2 ##
+
+```{r basketball}
+data_b <- read.csv('Intra College Basketball.csv')
+summary(data_b)
+```
+
+
+The ideal way to deal with heterogeneous data is to create different pockets of homogeneous data and run models on them separately to make the results of the model more reliable and as the heterogeneity in the data will lead to highly unreliable results. 
+
+We will also have to impute all the missing values before we execute the model. 
+
+Full Model (training):
+
+```{r data}
+
+smp_size <- floor(0.15 * nrow(data_b))
+
+## set the seed to make your partition reproducible
+set.seed(134)
+train_ind <- sample(seq_len(nrow(data_b)), size = smp_size)
+
+train <- data_b[train_ind, ]
+test <- data_b[-train_ind, ]
+
+#### removing columns from training data ####
+
+train$pick <- NULL
+train$Player <- NULL
+train$Team <- NULL
+train$ht <- NULL
+train$yr <- NULL
+train$year <- NULL
+train$Conference <- NULL
+train$num <- NULL
+train$Role <- NULL
+#train$Role <- NULL
+
+#### removing columns from test data ####
+test$pick <- NULL
+test$Player <- NULL
+test$Team <- NULL
+test$ht <- NULL
+test$yr <- NULL
+test$year <- NULL
+test$Conference <- NULL
+test$num <- NULL
+test$Role <- NULL
+
+
+ncol(train)
+
+#### remove all rows with null values in data frame ####
+
+train <- na.omit(train)
+test <- na.omit(test)
+
+full <- lm(pts ~ ., data = train)
+summary(full)
+```
+
+The number of variable used are 55.
+
+Full Model (testing):
+
+```{r testing}
+
+predfull <- predict.glm(full, newdata=test, type="response")
+pt <- as.numeric((test[['pts']]))
+print("R2 value is:")
+R2(pt, predfull)
+```
+
+
+## Question 3 ##
+
+# Part A #
+
+Forward selection is a kind of model selection process and keep on adding variable. A new variable is only added at each step if it's continues to improve the model. "Improving" is a subjective term and depends on the problem statement. One of main advantages is that we get parsimonous model and there are no sudden jumps in p-value. The main disadvantage is that once a variable has been added, it cannot be removed. 
+
+It is better than using NULL model as in a real world, the dependent variable is a combination of various factors and hence, adding any one of those factors will lead to a better result than just assuming it to be mean all throughout. It is better than the full model as a full model will lead to over-fitting and hence, leading to large variations in prediction. 
+
+
+## Cross Validation model ##
+
+```{r cross-validation}
+
+data <- train
+
+set.seed(123) 
+train.control <- trainControl(method = "cv", number = 5)
+model <- train(pts ~., data = data,
+               method = "lm",
+               trControl = train.control)
+summary(model)
+
+```
+
+
+```{r prediction from CV}
+data <- test
+data$pts <- NULL
+pred <- predict(model, data)
+
+pt1 <- as.numeric((test[['pts']]))
+
+print("R2 value is:")
+R2(pt1, pred)
+
+```
+
+## Question 4 ##
+
+LASSO stands for least absolute shrinkage and selection operator. Lasso regression is type of linear regression, where we add extra penalty for a non-zero coefficient feature. This addition of extra penalty term is also called shrinkage. Lasso leads a simple, parsimonious model as it allows only the most essential feature to enter the model and thus making them easier to interpret. Disadvantages of Lasso is that it might take longer for the error function to optimize in presence of penalties. It can also leave out some really important variables from a theoretical stand point. 
+
+## Question 5 ##
+
+### Part 1 and 2 ###
+
+```{r lasso code}
+
+#define response variable
+y <- train$pts
+
+data <- train 
+data$pts <- NULL
+
+#define matrix of predictor variables
+x <- data.matrix(train[, colnames(data)])
+
+cv_model <- cv.glmnet(x, y, alpha = 1)
+
+best_lambda <- cv_model$lambda.min
+optimal_lambda <- cv_model$lambda.1se
+
+```
+
+Even though the best value of lambda is 0.014, we will use the value of 0.031 as it is the optimal value for our model. 
+
+```{r lasso cv}
+
+best_model <- glmnet(x, y, alpha = 1, lambda = best_lambda)
+
+data <- test 
+data$pts <- NULL
+#define matrix of predictor variables
+x_test <- data.matrix(test[, colnames(data)])
+
+pred_cv <- predict(best_model, s = optimal_lambda, newx = x_test)
+pt1 <- as.numeric((test[['pts']]))
+
+print("R2 value is:")
+R2(pt1, pred_cv)
+
+```
