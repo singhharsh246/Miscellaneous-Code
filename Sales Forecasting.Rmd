@@ -1,0 +1,214 @@
+---
+title: "Assignment1- Team7"
+authors: " Maria Ahumada, Harsh Harsh, Linus Rupp, Melissa Talgo, Pranjal Srivastava"
+date: "01/28/2021"
+output:
+  html_document:
+    df_print: paged
+  pdf_document:
+    latex_engine: pdflatex
+geometry: margin=3cm
+fontsize: 11pt
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen=999)
+```
+
+```{r package installations, include=FALSE,warning=FALSE}
+r = getOption("repos")
+r["CRAN"] = "http://cran.us.r-project.org"
+options(repos = r)
+install.packages('knitr')
+install.packages('gsubfn')
+install.packages('dplyr')
+install.packages("readxl")
+install.packages("tidyr")
+install.packages('ggplot2')
+install.packages(c("forecast", "TTR"), dependencies=TRUE)
+```
+
+```{r include=FALSE,warning=FALSE,tidy=TRUE}
+library(knitr)
+library(gsubfn)
+library(dplyr)
+library(readxl)
+library(tidyr)
+library(ggplot2)
+library(forecast)
+library(TTR)
+opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
+```
+
+# Part 1
+## Read the data & select 5 variables to perform decomposition
+```{r part1, echo=TRUE, tidy=TRUE}
+rm(list=ls(all=TRUE))
+#Input data
+data<-read.csv("data_week.csv", sep=",",dec=".",header=T) 	
+
+#Preview of the data
+head(data,5)
+
+#variable #1
+sales = (data$netsales_online)/1000000		# remove the millions so it becomes a small digit
+head(sales)
+#yy = ts(sales, frequency = 52,start = c(2015,1))
+#plot.ts(yy)
+
+#variable #2
+snow_level <- data$avg_snow_level #numeric data type
+head(snow_level)
+
+#variable #3
+#rainfall
+avg_rainfall_level <- data$avg_rainfall_level
+head(avg_rainfall_level)
+
+#variable #4
+#budget
+budget <- data$online_budget/100000
+head(budget)
+
+#variable #5
+#cloud_index
+cloud_index <- data$avg_cloud_index
+head(cloud_index)
+```
+
+
+# Part 2
+## Represent data as a time-series object
+```{r part2, echo=TRUE,tidy=TRUE}
+##### Representing Data as Time Series Objects #####
+# convert [x variable] into an R time series object; weekly means frequency is 52 and starting in year 2015, week 01
+convert_to_ts <-  function(explanatory_variable){
+  x <- ts(explanatory_variable,frequency = 52, start = c(2015,1))
+  return(x)
+}
+
+#Apply function to all 5 variables chosen
+sales_ts <- convert_to_ts(sales)
+snow_level_ts <- convert_to_ts(snow_level)
+avg_rainfall_level_ts <- convert_to_ts(avg_rainfall_level)
+budget_ts <- convert_to_ts(budget)
+cloud_index_ts <- convert_to_ts(cloud_index)
+
+#Plot time series
+plot.ts(sales_ts)
+plot.ts(snow_level_ts)
+plot(avg_rainfall_level_ts)
+plot(budget_ts)
+plot(cloud_index_ts)
+```
+
+
+# Part 3
+## Time Series Decomposition into Signal+ Noise where Signal = Trend + Seasonality
+```{r part3, echo=TRUE,tidy=TRUE}
+decompose_ts_variable <- function(ts_variable){
+  decomp =  decompose(ts_variable)
+  trend = decomp$trend
+  seasonal = decomp$seasonal
+  seasonal_adj = ts_variable - seasonal
+  random = decomp$random
+  plot.ts(cbind(ts_variable,trend, seasonal,seasonal_adj, random))
+}
+
+#Apply function to all 5 variables we need to decompose
+decompose_ts_variable(sales_ts)
+decompose_ts_variable(snow_level_ts)
+decompose_ts_variable(avg_rainfall_level_ts)
+decompose_ts_variable(budget_ts)
+decompose_ts_variable(cloud_index_ts)
+```
+
+
+# Part 4 #
+
+## Holt-Winters ##
+
+```{r part 4, echo=TRUE,tidy=TRUE}
+calculate_holt_winters <- function(ts_variable, ts_var_name){
+output1 = HoltWinters(ts_variable, beta=TRUE, gamma=TRUE) #both trend and seasonality ON
+output2 = HoltWinters(ts_variable, beta=FALSE, gamma=FALSE) #both trend and seasonality OFF
+output3 = HoltWinters(ts_variable, beta=TRUE, gamma=FALSE) #trend ON and seasonality OFF
+output4 = HoltWinters(ts_variable, beta=FALSE, gamma=TRUE) #trend OFF and seasonality OFF
+
+
+#### plotting the fitted method ###
+
+par(mfrow=c(2,2))
+plot(output1, main=paste("HW(W gamma and beta) for",ts_var_name, sep = " ", collapse = NULL))
+plot(output2, main=paste("HW (W/O gamma and beta) for",ts_var_name, sep = " ", collapse = NULL))
+plot(output3, main=paste("HW (W/O gamma and W beta) for",ts_var_name, sep = " ", collapse = NULL))
+plot(output4, main=paste("HW (W gamma and W/O beta) for",ts_var_name, sep = " ", collapse = NULL))
+
+
+#### plotting the forecasted method #####
+
+autoplot(ts_variable) +
+  autolayer(forecast(output1, h = 26), series="Holt-Winter's (With gamma and beta)", PI=FALSE) +
+  autolayer(forecast(output2, h = 26), series="Holt-Winter's (Without gamma and beta)", PI=FALSE) +
+  autolayer(forecast(output3, h = 26), series="Holt-Winter's (With beta and without gamma)", PI=FALSE) +
+  autolayer(forecast(output4, h = 26), series="Holt-Winter's (Without beta and with gamma)", PI=FALSE) +
+  ylab(ts_var_name) + xlab("Year") + 
+  guides(colour=guide_legend(title="Forecast")) +
+  ggtitle("Comparing different version of Holt's Method") + xlab("Year") 
+
+
+}
+
+calculate_holt_winters(sales_ts, "Sales_ts")
+calculate_holt_winters(snow_level_ts, "snow_level_ts")
+calculate_holt_winters(avg_rainfall_level_ts, "avg_rainfall_level_ts")
+calculate_holt_winters(budget_ts, "budget_ts")
+calculate_holt_winters(cloud_index_ts, "cloud_index_ts")
+```
+
+
+
+
+
+
+# Part 6
+## Check residuals for the four combinations using Holts-Winter Filter
+```{r part6, echo=TRUE,tidy=TRUE}
+
+checking_residuals <- function(ts_variable, ts_var_name){
+output1 = HoltWinters(ts_variable, beta=TRUE, gamma=TRUE) #both trend and seasonality ON
+output2 = HoltWinters(ts_variable, beta=FALSE, gamma=FALSE) #both trend and seasonality OFF
+output3 = HoltWinters(ts_variable, beta=TRUE, gamma=FALSE) #trend ON and seasonality OFF
+output4 = HoltWinters(ts_variable, beta=FALSE, gamma=TRUE) #trend OFF and seasonality OFF
+
+out1_res <- residuals(output1)
+out2_res <- residuals(output2)
+out3_res <- residuals(output3)
+out4_res <- residuals(output4)
+
+checkresiduals(out1_res)
+checkresiduals(out2_res)
+checkresiduals(out3_res)
+checkresiduals(out4_res)
+
+}
+
+```
+
+
+
+# Part 7
+## Retain only one out of four models per variable decomposed -- give your justification
+```{r part7, echo=TRUE}
+
+checking_residuals(sales_ts, "sales_ts")
+checking_residuals(snow_level_ts, "snow_level_ts")
+checking_residuals(avg_rainfall_level_ts, "avg_rainfall_level_ts")
+checking_residuals(budget_ts, "budget_ts")
+checking_residuals(cloud_index_ts, "cloud_index_ts")
+
+```
+
+### Sales_ts ###
+
+I believe for sales ts we can directly ignore Holt-Winter's method with either the gamma or beta missing since residuals are clearly not normal. For method with both beta and gamma true, I the correlation with lagged residuals is very high after the 6th lag, whereas in the ACF chart for Holt-winters without beta or gamma, the lagged residuals start dominating only after the 22nd term, and hence, we will choose Holt-Winter's method without beta and gamma to forecast sales_ts.
